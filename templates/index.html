@@ -41,7 +41,10 @@
 
       <!-- New Post -->
       <!-- TODO: Only show Create Post button if user id is 1 (admin user) -->
-      {% if hide==0 %}
+
+
+
+      {% if hide==edit_button_active  %}
         <div class="d-flex justify-content-end mb-4">
           <a
             class="btn btn-primary float-right"

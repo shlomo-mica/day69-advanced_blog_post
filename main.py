@@ -67,8 +67,8 @@ with app.app_context():
 
 
 @login_manager.user_loader
-def load_user(id1):
-    return Users.query.get(int(id1))
+def load_user(id12):
+    return Users.query.get(int(id12))
 
 
 # TODO: Use Werkzeug to hash the user's password when creating a new user.
@@ -93,32 +93,34 @@ def register():
 
 
 def find_admin_by_email(form_email, form_password):
-    try:
-        find_admin = Users.query.filter_by(user_mail=form_email, id=12, user_password=form_password).first()
-        mail_login = Users.query.filter_by(user_mail=form_email).first()
+    find_admin_id = Users.query.filter_by(id=12).first()
+    find_admin_mail = Users.query.filter_by(user_mail=form_email).first()
+    if find_admin_id and find_admin_mail and check_password_hash(find_admin_id.user_password, form_password):
+        print("find ADMIN")
+        return "ok"  # redirect(url_for('get_all_posts'))
+    else:
+        message = "wrong mail or password"
+        return redirect(url_for('login', message=message))
 
-        if check_password_hash(mail_login.user_password, form_password) and find_admin:
-            print("admin approved")
-            return True
-    except:
-        return False
+    # #if check_password_hash(find_admin_id.user_password, form_password):
+    #     print("admin password approved")
+    #     return render_template("index.html")
+    # else:
+    #     print("wrong admin password or email ")
+    #     return redirect(url_for('login'))
 
 
 # TODO: Retrieve a user from the database based on their email.
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
-
     if request.method == 'POST':
-
         admin_login = find_admin_by_email(request.form.get('email'), request.form.get('password'))
-
-        if admin_login:
+        if admin_login == 'ok':
             print("Admin entered")
             flash("Hello Admin")
             # return redirect(f'/get_all_posts/{a}')
-            return redirect(url_for('get_all_posts'))
-
+            return redirect(url_for('get_all_posts', hide='edit_button_active'))
         else:
             print("regular user enter")
             all_record = Users.query.all()  # CALL ALL RECORDS IN DATABASE
@@ -130,11 +132,10 @@ def login():
 
                 if check_password_hash(mail_login.user_password, request.form.get('password')):
 
-                    print("stage 3")
                     login_user(mail_login, remember=True)
                     flash("Password match")
-
-                    return redirect(url_for("get_all_posts"))
+                    print("stage 3")
+                    return redirect(url_for("get_all_posts", hide='hide_edit_button'))
 
                 else:
                     flash("Email or Password dont match")
@@ -156,7 +157,7 @@ def logout():
 def get_all_posts():
     result = db.session.execute(db.select(BlogPost))
     posts = result.scalars().all()
-    return render_template("index.html", all_posts=posts)
+    return render_template("index.html", all_posts=posts, hide=0)  # hide=0 admin button active
 
 
 # TODO: Allow logged-in users to comment on posts

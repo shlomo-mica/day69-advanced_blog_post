@@ -1,10 +1,13 @@
 from datetime import date
-from flask import Flask, abort, render_template, redirect, url_for, flash, request
+
+import flask
+from flask import Flask, abort, render_template, redirect, url_for, flash, request, session
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
 from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
 from functools import wraps
+from sqlalchemy import select
 
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -67,14 +70,28 @@ with app.app_context():
 
 
 @login_manager.user_loader
-def load_user(id12):
-    return Users.query.get(int(id12))
+def load_user(user_id):
+    return Users.query.get(user_id)
+
+
+second_list = []
+
+
+@app.route('/')
+def get_all_posts():
+    result = db.session.execute(db.select(BlogPost))
+    posts = result.scalars().all()
+    show_create_post_button = False
+
+    return render_template("index.html", all_posts=posts, loggedIn=True, create_post_button=show_create_post_button)
+    # hide=0 only logout show when non
+
+    # register/login users
 
 
 # TODO: Use Werkzeug to hash the user's password when creating a new user.
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    test1 = 'new register hi'
     form = RegisterForm()
     if request.method == 'POST':
         user = Users(user_name=form.name.data, user_mail=form.email.data,
@@ -82,14 +99,13 @@ def register():
 
         db.session.add(user)
         db.session.commit()
-        a = 'new_one'
-        flash("gggg")
-        return redirect(url_for('login', test=a))
+
+        return redirect(url_for('login'))
         # name = request.form['name']
         # email = request.form["email"]
         # password = request.form['password']
 
-    return render_template("register.html", form=form, test=test1)
+    return render_template("register.html", form=form, show_nav_bar=1, loggedIn=False)  # 1==show nav bar
 
 
 def find_admin_by_email(form_email, form_password):
@@ -97,67 +113,58 @@ def find_admin_by_email(form_email, form_password):
     find_admin_mail = Users.query.filter_by(user_mail=form_email).first()
     if find_admin_id and find_admin_mail and check_password_hash(find_admin_id.user_password, form_password):
         print("find ADMIN")
-        return "ok"  # redirect(url_for('get_all_posts'))
+        admin_list_det=["real_admin", form_password, form_email]
+        return "real_admin"
+
     else:
         message = "wrong mail or password"
         return redirect(url_for('login', message=message))
-
-    # #if check_password_hash(find_admin_id.user_password, form_password):
-    #     print("admin password approved")
-    #     return render_template("index.html")
-    # else:
-    #     print("wrong admin password or email ")
-    #     return redirect(url_for('login'))
 
 
 # TODO: Retrieve a user from the database based on their email.
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
+    result = db.session.execute(db.select(BlogPost))
+    post_fromlogin = result.scalars().all()
+
     if request.method == 'POST':
+
         admin_login = find_admin_by_email(request.form.get('email'), request.form.get('password'))
-        if admin_login == 'ok':
+        if admin_login == "real_admin":
             print("Admin entered")
             flash("Hello Admin")
-            # return redirect(f'/get_all_posts/{a}')
-            return redirect(url_for('get_all_posts', hide='edit_button_active'))
+            # redirect(url_for('get_all_posts'))
+            # return redirect(f'/get_all_posts/')
+            #create_post_button = True
+            return render_template("index.html",all_posts=post_fromlogin, show_nav_bar=1, loggedIn=False,
+                                   show_create_post_button=True, test='testttttttttttttt')
+
         else:
-            print("regular user enter")
-            all_record = Users.query.all()  # CALL ALL RECORDS IN DATABASE
-            mail_login = Users.query.filter_by(user_mail=request.form.get('email')).first()
-            print("stage1")
-            if mail_login:
+            print("user trying to login....")
+        all_record = Users.query.all()  # CALL ALL RECORDS IN DATABASE
+        mail_login = Users.query.filter_by(user_mail=request.form.get('email')).first()
+        # result = db.session.execute(db.select(Users).where(Users.email == request.form.get('email')))
+        # Note, email in db is unique so will only have one result.
+        # user = result.scalar()
 
-                print("stage 2")
+        jhony = (select(Users).where(Users.user_mail == request.form.get('email')))
 
-                if check_password_hash(mail_login.user_password, request.form.get('password')):
+        if mail_login and check_password_hash(mail_login.user_password, request.form.get('password')):
 
-                    login_user(mail_login, remember=True)
-                    flash("Password match")
-                    print("stage 3")
-                    return redirect(url_for("get_all_posts", hide='hide_edit_button'))
+            login_user(mail_login, remember=True)
+            flash("Password match")
 
-                else:
-                    flash("Email or Password dont match")
-
-    return render_template("login.html", form=form)
+            return render_template("index.html", loggedIn=False, all_posts=post_fromlogin)
+        else:
+            flash("Email or Password dont match")
+    return render_template("login.html", form=form, loggedIn=True)
 
 
 # # duser = db.one_or_404(db.select(Users).filter_by(user_name='didi'))
 # exist = db.session.query(Users.user_mail).filter_by(user_mail=request.form.get('email'))
 # user_login = Users.query.filter_by(user_mail=request.form.get('email')).first()
 # admin_only = db.session(db.select(Users.user_mail).where(Users.id == 1)).first()
-
-@app.route('/logout')
-def logout():
-    return redirect(url_for('get_all_posts'))
-
-
-@app.route('/')
-def get_all_posts():
-    result = db.session.execute(db.select(BlogPost))
-    posts = result.scalars().all()
-    return render_template("index.html", all_posts=posts, hide=0)  # hide=0 admin button active
 
 
 # TODO: Allow logged-in users to comment on posts
@@ -190,6 +197,7 @@ def add_new_post():
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
 def edit_post(post_id):
     post = db.get_or_404(BlogPost, post_id)
+    print("1")
     edit_form = CreatePostForm(
         title=post.title,
         subtitle=post.subtitle,
@@ -198,14 +206,17 @@ def edit_post(post_id):
         body=post.body
     )
     if edit_form.validate_on_submit():
+        print("2")
         post.title = edit_form.title.data
         post.subtitle = edit_form.subtitle.data
         post.img_url = edit_form.img_url.data
-        post.author = current_user
+        # post.author = current_user
         post.body = edit_form.body.data
         db.session.commit()
+
         return redirect(url_for("show_post", post_id=post.id))
-    return render_template("make-post.html", form=edit_form, is_edit=True)
+    else:
+        return render_template("make-post.html", form=edit_form, is_edit=True)
 
 
 # TODO: Use a decorator so only an admin user can delete a post
@@ -225,6 +236,11 @@ def about():
 @app.route("/contact")
 def contact():
     return render_template("contact.html")
+
+
+@app.route('/logout')
+def logout():
+    return redirect(url_for('get_all_posts'))
 
 
 if __name__ == "__main__":

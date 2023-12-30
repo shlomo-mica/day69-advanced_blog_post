@@ -43,8 +43,10 @@
       <!-- TODO: Only show Create Post button if user id is 1 (admin user) -->
 
 
+      {{ test }}
 
-      {% if hide==edit_button_active  %}
+      {% if show_create_post_button == True %}
+        {{ test }}
         <div class="d-flex justify-content-end mb-4">
           <a
             class="btn btn-primary float-right"
@@ -56,7 +58,7 @@
 
       <!-- Pager-->
       <div class="d-flex justify-content-end mb-4">
-       {{ hide33 }}
+
         <a class="btn btn-secondary text-uppercase" href="#!">Older Posts →</a>
       </div>
     </div>

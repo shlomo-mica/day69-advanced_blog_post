@@ -1,11 +1,12 @@
 from datetime import date
-
+from functools import wraps
+from flask import abort
 import flask
 from flask import Flask, abort, render_template, redirect, url_for, flash, request, session
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
-from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
+from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user, login_required
 from functools import wraps
 from sqlalchemy import select
 
@@ -14,7 +15,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
 
 # Import your forms from the forms.py
-from forms import CreatePostForm, RegisterForm, LoginForm, ConnentForm
+from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
 
 '''
 Make sure the required packages are installed: 
@@ -33,8 +34,9 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
 ckeditor = CKEditor(app)
 Bootstrap5(app)
-login_manager = LoginManager()
+login_manager = LoginManager(app)
 login_manager.init_app(app)
+# login_manager.login_view = 'login'  # Set the login view for login_required decorator
 
 # TODO: Configure Flask-Login
 
@@ -47,11 +49,13 @@ db = SQLAlchemy()
 class BlogPost(db.Model, UserMixin):
     __tablename__ = "blog_posts"
     id = db.Column(db.Integer, primary_key=True)
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
     title = db.Column(db.String(250), unique=True, nullable=False)
     subtitle = db.Column(db.String(250), nullable=False)
     date = db.Column(db.String(250), nullable=False)
     body = db.Column(db.Text, nullable=False)
-    author = db.Column(db.String(250), nullable=False)
+    author = relationship("User", back_populates="posts")
     img_url = db.Column(db.String(250), nullable=False)
 
 
@@ -62,11 +66,36 @@ class Users(db.Model, UserMixin):
     user_mail = db.Column(db.String(100), unique=True)
     user_password = db.Column(db.String(100))
     user_name = db.Column(db.String(100))
-
+    # This will act like a List of BlogPost objects attached to each User.
+    # The "author" refers to the author property in the BlogPost class.
+    posts = relationship("BlogPost", back_populates="author")
 
 db.init_app(app)
 with app.app_context():
     db.create_all()
+
+
+# Create admin-only decorator
+def admin_only(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # If id is not 1 then return abort with 403 error
+        print(current_user.id)
+        if current_user.id != 13:
+            return abort(403)
+        # Otherwise continue with the route function
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def login_required22(func):
+    def secure_function():
+        if "email" not in session:
+            return redirect(url_for("login"))
+        return func()
+
+    return secure_function
 
 
 @login_manager.user_loader
@@ -74,15 +103,12 @@ def load_user(user_id):
     return Users.query.get(user_id)
 
 
-second_list = []
-
-
 @app.route('/')
 def get_all_posts():
     result = db.session.execute(db.select(BlogPost))
     posts = result.scalars().all()
     show_create_post_button = False
-
+    print("cueerent_user", current_user)
     return render_template("index.html", all_posts=posts, loggedIn=True, create_post_button=show_create_post_button)
     # hide=0 only logout show when non
 
@@ -113,7 +139,7 @@ def find_admin_by_email(form_email, form_password):
     find_admin_mail = Users.query.filter_by(user_mail=form_email).first()
     if find_admin_id and find_admin_mail and check_password_hash(find_admin_id.user_password, form_password):
         print("find ADMIN")
-        admin_list_det=["real_admin", form_password, form_email]
+        admin_list_det = ["real_admin", form_password, form_email]
         return "real_admin"
 
     else:
@@ -131,14 +157,15 @@ def login():
     if request.method == 'POST':
 
         admin_login = find_admin_by_email(request.form.get('email'), request.form.get('password'))
+        # login_user(Users.id == 12)
         if admin_login == "real_admin":
             print("Admin entered")
             flash("Hello Admin")
             # redirect(url_for('get_all_posts'))
             # return redirect(f'/get_all_posts/')
-            #create_post_button = True
-            return render_template("index.html",all_posts=post_fromlogin, show_nav_bar=1, loggedIn=False,
-                                   show_create_post_button=True, test='testttttttttttttt')
+            # create_post_button = True
+            return render_template("index.html", all_posts=post_fromlogin, show_nav_bar=1, loggedIn=False,
+                                   show_create_delete_post_buttons=True, test='testttttttttttttt')
 
         else:
             print("user trying to login....")
@@ -176,17 +203,19 @@ def show_post(post_id):
 
 # TODO: Use a decorator so only an admin user can create a new post
 @app.route("/new-post", methods=["GET", "POST"])
+@admin_only
 def add_new_post():
     form = CreatePostForm()
+    print("CURRENT ID=", {current_user.id})
     if form.validate_on_submit():
         new_post = BlogPost(
             title=form.title.data,
             subtitle=form.subtitle.data,
             body=form.body.data,
             img_url=form.img_url.data,
-            author=current_user,
-            date=date.today().strftime("%B %d, %Y")
-        )
+            date=date.today().strftime("%B %d, %Y"),
+            author=current_user)
+
         db.session.add(new_post)
         db.session.commit()
         return redirect(url_for("get_all_posts"))
@@ -195,6 +224,7 @@ def add_new_post():
 
 # TODO: Use a decorator so only an admin user can edit a post
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
+@admin_only
 def edit_post(post_id):
     post = db.get_or_404(BlogPost, post_id)
     print("1")
@@ -221,6 +251,7 @@ def edit_post(post_id):
 
 # TODO: Use a decorator so only an admin user can delete a post
 @app.route("/delete/<int:post_id>")
+@admin_only
 def delete_post(post_id):
     post_to_delete = db.get_or_404(BlogPost, post_id)
     db.session.delete(post_to_delete)
@@ -239,7 +270,9 @@ def contact():
 
 
 @app.route('/logout')
+@login_required
 def logout():
+    logout_user()
     return redirect(url_for('get_all_posts'))
 
 

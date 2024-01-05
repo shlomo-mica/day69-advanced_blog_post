@@ -32,7 +32,9 @@
             <a href="#">{{post.author}}</a>
             on {{post.date}}
             <!-- TODO: Only show delete button if user id is 1 (admin user) -->
-            <a href="{{url_for('delete_post', post_id=post.id) }}">✘</a>
+            {% if show_create_delete_post_buttons == True %}
+             <a href="{{url_for('delete_post', post_id=post.id) }}">✘</a>
+            {% endif %}
           </p>
         </div>
         <!-- Divider-->
@@ -43,10 +45,10 @@
       <!-- TODO: Only show Create Post button if user id is 1 (admin user) -->
 
 
-      {{ test }}
 
-      {% if show_create_post_button == True %}
-        {{ test }}
+
+      {% if show_create_delete_post_buttons == True %}
+
         <div class="d-flex justify-content-end mb-4">
           <a
             class="btn btn-primary float-right"
